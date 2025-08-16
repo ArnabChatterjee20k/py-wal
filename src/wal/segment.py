@@ -47,6 +47,9 @@ class SegmentManager:
         if not self._source_dir.exists():
             self._source_dir.mkdir(parents=True, exist_ok=True)
 
+    def get_total_segments(self):
+        return self._last_segment
+
     def create(self):
         name = self._format_name(self._last_segment)
         path = self._source_dir / f"{name}.{self._extension}"
@@ -64,6 +67,9 @@ class SegmentManager:
 
     def list_segments(self) -> list[Segment]:
         return [Segment(path) for path in self._source_dir.iterdir() if path.is_file()]
+
+    def rotate(self):
+        self.create()
 
     def _format_name(self, name: str):
         # 8 bytes

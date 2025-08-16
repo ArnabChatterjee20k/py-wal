@@ -13,11 +13,14 @@ class WAL:
         directory: str,
         fsync=False,
         max_segments=4,
+        max_log_file_size=2,
         sync_interval_ms=200,
         keep_syncing=True,
     ):
         self._segment_manager = SegmentManager(directory)
         self._fsync = fsync
+        self.max_log_file_size = max_log_file_size
+        self.max_segments = max_segments
 
         self._last_lsn = 0
         self._lock = Lock()
@@ -46,7 +49,6 @@ class WAL:
         state: State = State.BEGIN,
     ):
         with self._lock:
-            self.roatate()
             log = Log(
                 lsn=self._last_lsn,
                 transaction_id=transaction_id,
@@ -55,7 +57,13 @@ class WAL:
             )
             self._last_lsn += 1
             length, entry = log.get()
-            # TODO: check if new segment required
+            if length + self._current_segment.get_size() >= self.max_log_file_size:
+                self._segment_manager.rotate()
+
+            if self._segment_manager.get_total_segments() >= self.max_segments:
+                # TODO: delete old log file
+                pass
+
             self._buffer.append(entry)
 
     def read_entries(self):
@@ -69,12 +77,6 @@ class WAL:
         if self._timer:
             self._timer.join()
         self._buffer.close()
-
-    def roatate(self):
-        # sync current segment
-        # rotate
-        # write to segment
-        pass
 
     def replay(self):
         pass
