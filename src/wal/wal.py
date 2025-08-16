@@ -2,13 +2,19 @@ from .log import Log, State
 from .segment import SegmentManager
 from threading import Lock, Timer
 import uuid
+import struct, zlib
 
 
 # each segment 16mb each
 class WAL:
 
     def __init__(
-        self, directory: str, fsync=False, max_segments=4, sync_interval_ms=200
+        self,
+        directory: str,
+        fsync=False,
+        max_segments=4,
+        sync_interval_ms=200,
+        keep_syncing=True,
     ):
         self._segment_manager = SegmentManager(directory)
         self._fsync = fsync
@@ -18,13 +24,19 @@ class WAL:
 
         self.sync_interval_ms = sync_interval_ms
         self._timer: Timer = None
-        self._running = True
+        self._running = keep_syncing
 
         self.start_syncing()
 
     @property
     def _buffer(self):
         """we dont need an external buffer, we can write to the buffer of the segment/file stream"""
+        return self._segment_manager.get_last_segment()
+
+    @property
+    def _current_segment(self):
+        """returning the synced segment, mostly for reading"""
+        self.sync()
         return self._segment_manager.get_last_segment()
 
     def append(
@@ -41,9 +53,15 @@ class WAL:
                 payload=entry,
                 state=state,
             )
+            self._last_lsn += 1
             length, entry = log.get()
             # TODO: check if new segment required
             self._buffer.append(entry)
+
+    def read_entries(self):
+        with self._current_segment as segment:
+            entries = [entry for entry in Log.parse_buffer(segment)]
+        return entries
 
     def close(self):
         self._running = False

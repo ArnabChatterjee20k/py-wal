@@ -3,7 +3,8 @@ import msgpack
 import enum
 import struct
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import BinaryIO, Generator, Any
 
 
 class State(enum.Enum):
@@ -29,7 +30,6 @@ class Log:
     transaction_id: uuid.UUID
     payload: dict
     state: State = State.BEGIN
-    length: int = field(init=False, default=4)
 
     def get(self) -> tuple[int, bytes]:
         """
@@ -50,18 +50,40 @@ class Log:
         return length, struct.pack(">I", length) + struct.pack(">I", crc) + data
 
     @staticmethod
-    def parse(buf) -> "Log":
-        length, crc = struct.unpack(">II", buf[:8])
+    def parse(buf: bytes) -> "Log":
+        return Log._parse_payload(buf[4:])
 
-        data = buf[8:]
+    @staticmethod
+    def parse_buffer(buf: BinaryIO) -> Generator["Log", None, None]:
+        while True:
+            binary_length = buf.read(4)
+            if not binary_length or len(binary_length) < 4:
+                break
+
+            length = struct.unpack(">I", binary_length)[0]
+            data = buf.read(length)
+            if len(data) < length:
+                raise EOFError("Incomplete log entry")
+
+            yield Log._parse_payload(data)
+
+    @staticmethod
+    def _parse_payload(buf: bytes) -> "Log":
+        """
+        buf: binary data including CRC and excluding length (4 bytes)
+        """
+        crc = struct.unpack(">I", buf[:4])[0]
+
+        # The actual data starts after CRC
+        data = buf[4:]
+
         new_crc = zlib.crc32(data) & 0xFFFFFFFF
         if new_crc != crc:
             raise ValueError("Data corrupted")
 
-        lsn = struct.unpack(">Q", buf[8:16])[0]
-        transaction_id = uuid.UUID(bytes=buf[16:32])
-        # state = struct.unpack("B",buf[32])[0]
-        state = State(buf[32])
-        payload = msgpack.loads(buf[33:])
+        lsn = struct.unpack(">Q", data[:8])[0]  # 8 bytes
+        transaction_id = uuid.UUID(bytes=data[8:24])  # 16 bytes
+        state = State(data[24])  # 1 byte
+        payload = msgpack.loads(data[25:])  # rest
 
         return Log(lsn=lsn, transaction_id=transaction_id, payload=payload, state=state)

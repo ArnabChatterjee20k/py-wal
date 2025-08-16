@@ -7,12 +7,20 @@ class Segment:
         self._path = path
         self._file = open(self._path, "ab")
         self._file.seek(0, io.SEEK_END)
+        self._file_read = None
+
+    def __enter__(self):
+        self._read()
+        return self._file_read
+
+    def __exit__(self, *args, **kwargs):
+        self._file_read.close()
 
     def append(self, data: bytes):
         self._file.write(data)
 
-    def read(self, offset):
-        pass
+    def _read(self):
+        self._file_read = open(self._path, "rb")
 
     def get_size(self):
         return os.stat(self._path).st_size
@@ -36,15 +44,14 @@ class SegmentManager:
         self._source_dir = Path(source)
         self._extension = extension
         self._last_segment = 0
-        if not self.get_last_segment().exists():
-            self.create()
+        if not self._source_dir.exists():
+            self._source_dir.mkdir(parents=True, exist_ok=True)
 
-    def create(self) -> Segment:
+    def create(self):
         name = self._format_name(self._last_segment)
         path = self._source_dir / f"{name}.{self._extension}"
         path.touch()
         self._last_segment += 1
-        return Segment(path)
 
     def get_segment(self, name: str) -> Segment:
         path = self._source_dir / f"{name}.{self._extension}"
