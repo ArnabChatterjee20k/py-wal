@@ -1,22 +1,34 @@
-import shutil, glob
+import shutil, glob, io, os
 from pathlib import Path
 
 
 class Segment:
     def __init__(self, path: Path):
         self._path = path
+        self._file = open(self._path, "ab")
+        self._file.seek(0, io.SEEK_END)
 
-    def append(data: bytes):
+    def append(self, data: bytes):
+        self._file.write(data)
+
+    def read(self, offset):
         pass
 
-    def read():
-        pass
+    def get_size(self):
+        return os.stat(self._path).st_size
 
-    def get_size():
-        pass
+    def flush(self):
+        self._file.flush()
+
+    def fsync(self):
+        os.fsync(self._file.fileno())
 
     def exists(self):
         return self._path.exists()
+
+    def close(self):
+        self._file.flush()
+        self._file.close()
 
 
 class SegmentManager:

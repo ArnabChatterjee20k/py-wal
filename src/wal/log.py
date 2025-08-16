@@ -31,7 +31,10 @@ class Log:
     state: State = State.BEGIN
     length: int = field(init=False, default=4)
 
-    def get(self):
+    def get(self) -> tuple[int, bytes]:
+        """
+        returns (length of encoded actual data, bytes)
+        """
         lsn = struct.pack(">Q", self.lsn)
         transaction = self.transaction_id.bytes
         state = struct.pack("B", self.state.value)
@@ -44,7 +47,7 @@ class Log:
         # length = CRC + data
         length = 4 + len(data)
 
-        return struct.pack(">I", length) + struct.pack(">I", crc) + data
+        return length, struct.pack(">I", length) + struct.pack(">I", crc) + data
 
     @staticmethod
     def parse(buf) -> "Log":
